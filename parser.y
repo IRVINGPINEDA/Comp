@@ -11,7 +11,7 @@ extern int yylineno;
 extern int yycolumn;
 
 /* Bison */
-void yyerror(YYLTYPE *loc, const char *s);
+int yyerror(const char *s);
 
 /* -------- Tabla de símbolos simple -------- */
 typedef struct Var {
@@ -50,10 +50,6 @@ static int get_var(const char *name, double *out) {
 }
 %}
 
-/* Ubicaciones para errores con línea/columna */
-%locations
-%define parse.error detailed
-
 %union {
     double num;
     char  *id;
@@ -64,7 +60,6 @@ static int get_var(const char *name, double *out) {
 
 %type  <num> expr term pow unary primary
 
-/* Precedencias */
 %left '+' '-'
 %left '*' '/'
 %right '^'
@@ -84,19 +79,17 @@ line:
     | error '\n'             { fprintf(stderr, "Se omitió la línea por error.\n"); yyerrok; }
     ;
 
-/* Suma/resta */
 expr:
       expr '+' term          { $$ = $1 + $3; }
     | expr '-' term          { $$ = $1 - $3; }
     | term                   { $$ = $1; }
     ;
 
-/* Mult/div */
 term:
       term '*' pow           { $$ = $1 * $3; }
     | term '/' pow           {
                                 if ($3 == 0.0) {
-                                    yyerror(&@2, "Error: división entre cero");
+                                    yyerror("Error: división entre cero");
                                     $$ = 0.0;
                                 } else {
                                     $$ = $1 / $3;
@@ -111,23 +104,20 @@ pow:
     | unary '^' pow          { $$ = pow($1, $3); }
     ;
 
-/* Unario */
 unary:
       '-' unary %prec UMINUS { $$ = -$2; }
     | primary                { $$ = $1; }
     ;
 
-/* Primarios */
 primary:
       '(' expr ')'           { $$ = $2; }
     | NUMBER                 { $$ = $1; }
     | ID                     {
                                 double val;
                                 if (!get_var($1, &val)) {
-                                    char msg[256];
-                                    snprintf(msg, sizeof(msg),
-                                             "Error: variable no definida '%s'", $1);
-                                    yyerror(&@1, msg);
+                                    fprintf(stderr,
+                                            "Error en línea %d, columna %d: variable no definida '%s'\n",
+                                            yylineno, yycolumn, $1);
                                     $$ = 0.0;
                                 } else {
                                     $$ = val;
@@ -144,7 +134,7 @@ int main(void) {
     return 0;
 }
 
-void yyerror(YYLTYPE *loc, const char *s) {
-    fprintf(stderr, "Error en línea %d, columna %d: %s\n",
-            loc->first_line, loc->first_column, s);
+int yyerror(const char *s) {
+    fprintf(stderr, "Error en línea %d, columna %d: %s\n", yylineno, yycolumn, s);
+    return 0;
 }
