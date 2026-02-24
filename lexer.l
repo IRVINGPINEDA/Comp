@@ -6,13 +6,6 @@
 
 int yycolumn = 1;
 
-/* Bison locations */
-#define YY_USER_ACTION                           \
-    yylloc.first_line   = yylineno;              \
-    yylloc.last_line    = yylineno;              \
-    yylloc.first_column = yycolumn;              \
-    yylloc.last_column  = yycolumn + (int)yyleng - 1;
-
 static void advance_col(void) {
     yycolumn += (int)yyleng;
 }
@@ -40,7 +33,7 @@ static void advance_col(void) {
                            return ID;
                         }
 
-/* operadores */
+/* operadores y símbolos */
 "^"                     { advance_col(); return '^'; }
 "="                     { advance_col(); return '='; }
 "("                     { advance_col(); return '('; }
