@@ -50,7 +50,7 @@ static int get_var(const char *name, double *out) {
 }
 %}
 
-/* Pedir a Bison que incluya ubicaciones (línea/columna) */
+/* Ubicaciones para errores con línea/columna */
 %locations
 %define parse.error detailed
 
@@ -62,13 +62,13 @@ static int get_var(const char *name, double *out) {
 %token <num> NUMBER
 %token <id>  ID
 
-%type  <num> expr term factor power
+%type  <num> expr term pow unary primary
 
-/* Precedencias (de menor a mayor) */
+/* Precedencias */
 %left '+' '-'
 %left '*' '/'
+%right '^'
 %right UMINUS
-%right '^'   /* potencia: asociativa a la derecha */
 
 %%
 
@@ -91,35 +91,42 @@ expr:
     | term                   { $$ = $1; }
     ;
 
-/* Multiplicación/división */
+/* Mult/div */
 term:
-      term '*' factor        { $$ = $1 * $3; }
-    | term '/' factor        {
+      term '*' pow           { $$ = $1 * $3; }
+    | term '/' pow           {
                                 if ($3 == 0.0) {
                                     yyerror(&@2, "Error: división entre cero");
-                                    $$ = 0.0; /* valor por defecto para continuar */
+                                    $$ = 0.0;
                                 } else {
                                     $$ = $1 / $3;
                                 }
                               }
-    | factor                 { $$ = $1; }
+    | pow                    { $$ = $1; }
     ;
 
-/* Factor incluye potencia y paréntesis */
-factor:
-      '-' factor %prec UMINUS { $$ = -$2; }
-    | power                   { $$ = $1; }
+/* Potencia a la derecha: a^b^c = a^(b^c) */
+pow:
+      unary                  { $$ = $1; }
+    | unary '^' pow          { $$ = pow($1, $3); }
     ;
 
-/* Potencia (derecha): 2^3^2 = 2^(3^2) */
-power:
-      '(' expr ')'            { $$ = $2; }
-    | NUMBER                  { $$ = $1; }
-    | ID                      {
+/* Unario */
+unary:
+      '-' unary %prec UMINUS { $$ = -$2; }
+    | primary                { $$ = $1; }
+    ;
+
+/* Primarios */
+primary:
+      '(' expr ')'           { $$ = $2; }
+    | NUMBER                 { $$ = $1; }
+    | ID                     {
                                 double val;
                                 if (!get_var($1, &val)) {
                                     char msg[256];
-                                    snprintf(msg, sizeof(msg), "Error: variable no definida '%s'", $1);
+                                    snprintf(msg, sizeof(msg),
+                                             "Error: variable no definida '%s'", $1);
                                     yyerror(&@1, msg);
                                     $$ = 0.0;
                                 } else {
@@ -127,7 +134,6 @@ power:
                                 }
                                 free($1);
                               }
-    | power '^' factor        { $$ = pow($1, $3); }
     ;
 
 %%
@@ -138,9 +144,7 @@ int main(void) {
     return 0;
 }
 
-/* Error con ubicación */
 void yyerror(YYLTYPE *loc, const char *s) {
-    /* loc->first_line / loc->first_column vienen de %locations */
-    fprintf(stderr, "Error sintáctico en línea %d, columna %d: %s\n",
+    fprintf(stderr, "Error en línea %d, columna %d: %s\n",
             loc->first_line, loc->first_column, s);
 }
